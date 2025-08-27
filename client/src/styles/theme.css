@@ -1,0 +1,106 @@
+:root {
+  --brand-bg-start: #eaf3ff;   /* svijetloplava */
+  --brand-bg-end:   #f6f9ff;   /* gotovo bijela */
+  --brand-primary:  #1d4ed8;   /* plava za gumbe (#1d4ed8) */
+  --card-radius:    12px;
+  --card-shadow:    0 10px 25px rgba(0,0,0,0.08);
+}
+
+/* Pozadina za auth ekrane */
+.auth-bg {
+  min-height: 100vh;
+  background: linear-gradient(180deg, var(--brand-bg-start), var(--brand-bg-end));
+}
+
+/* Kartica (forma) */
+.auth-card {
+  width: 100%;
+  max-width: 520px;
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+/* Logo zona iznad naslova */
+.auth-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  min-height: 56px; 
+}
+
+.btn-brand {
+  background-color: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #fff;
+}
+.btn-brand:hover,
+.btn-brand:focus {
+  filter: brightness(0.92);
+  color: #000000;
+  background-color:#bbe1ff;
+  border-color: #77bdf7;
+}
+
+a.text-decoration-none { text-decoration: none; }
+
+/* Za home page */
+.app-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+
+.logo-wrap {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; letter-spacing: .4px;
+}
+
+.card-soft {
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.06);
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.vehicle-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border: 1px solid rgba(0,0,0,.06);
+  border-radius: 10px; background: #fff;
+}
+.vehicle-item + .vehicle-item { margin-top: 10px; }
+.vehicle-meta { color: #6b7280; font-size: .9rem; }
+
+.expense-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px; padding: 8px 0; border-bottom: 1px dashed rgba(0,0,0,.08);
+}
+.expense-row:last-child { border-bottom: 0; }
+.expense-title { font-weight: 600; }
+.expense-sub { color: #6b7280; font-size: .9rem; }
+.expense-amount { font-weight: 700; }
+
+/* Za scrool moja vozila */
+.vehicle-list {
+  max-height: 307px;   
+  overflow-y: auto;    
+  padding-right: 4px;  
+}
+.vehicle-list::-webkit-scrollbar {
+  width: 4px;
+}
+.vehicle-list::-webkit-scrollbar-thumb {
+  background-color: #5f666d; 
+  border-radius: 5px;
+}
