@@ -972,13 +972,6 @@ export default function VehicleDetails() {
                   Izbriši
                 </button>
                 <div>
-                  <button
-                    type="button"
-                    className="btn btn-light me-2"
-                    onClick={() => viewEditModalInstance.current?.hide()}
-                  >
-                    Zatvori
-                  </button>
                   <button type="submit" className="btn btn-primary">
                     Spremi
                   </button>
