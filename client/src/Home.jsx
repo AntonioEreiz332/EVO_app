@@ -19,12 +19,22 @@ function Home() {
   const [vehicles, setVehicles] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [analytics, setAnalytics] = useState([]);
+  const thisYear = new Date().getFullYear();
   const [newVehicle, setNewVehicle] = useState({
     brand: "",
     model: "",
-    year: "",
+    year: String(thisYear),
     registration: "",
+    odometer: "",
   });
+
+  const yearOptions = useMemo(() => {
+    const start = 1980;
+    const end = thisYear + 1;
+    const arr = [];
+    for (let y = end; y >= start; y--) arr.push(y);
+    return arr;
+  }, [thisYear]);
 
   const addVehicleModalRef = useRef(null);
   const addVehicleModalInstance = useRef(null);
@@ -116,13 +126,20 @@ function Home() {
   // Dodavanje novog vozila
   const handleAddVehicle = async (e) => {
     e.preventDefault();
+    const km = Number(newVehicle.odometer);
+    if (!Number.isFinite(km) || km < 0) {
+      toast.warn("Unesi važeću kilometražu (0 ili više).");
+      return;
+    }
     try {
       const res = await axios.post("http://localhost:3001/vehicles", {
         ...newVehicle,
+        year: Number(newVehicle.year),
+        odometer: km,
         userId: user.id,
       });
       setVehicles((prev) => [...prev, res.data]);
-      setNewVehicle({ brand: "", model: "", year: "", registration: "" });
+      setNewVehicle({ brand: "", model: "", year: String(thisYear), registration: "",odometer: "" });
 
       addVehicleModalInstance.current?.hide();
       toast.success("Vozilo je uspješno dodano!", { autoClose: 300 });
@@ -318,15 +335,16 @@ function Home() {
                 </div>
                 <div className="mb-3">
                   <label className="form-label">Godina</label>
-                  <input
-                    type="number"
-                    className="form-control"
+                  <select
+                    className="form-select"
                     value={newVehicle.year}
-                    onChange={(e) =>
-                      setNewVehicle({ ...newVehicle, year: e.target.value })
-                    }
+                    onChange={(e) => setNewVehicle({ ...newVehicle, year: e.target.value })}
                     required
-                  />
+                  >
+                    {yearOptions.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="mb-3">
                   <label className="form-label">Registracija</label>
@@ -341,6 +359,19 @@ function Home() {
                       })
                     }
                     required
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Trenutna kilometraža (km)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="form-control"
+                    value={newVehicle.odometer}
+                    onChange={(e) => setNewVehicle({ ...newVehicle, odometer: e.target.value })}
+                    required
+                    placeholder="npr. 165000"
                   />
                 </div>
               </div>

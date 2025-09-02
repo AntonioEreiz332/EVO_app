@@ -22,6 +22,11 @@ mongoose.connect(MONGO_URI)
     console.log("Server is running")
 });
 
+const SERVICE_RESET_MAP = {
+  "Mali servis": "small",
+  "Veliki servis": "big",
+  "Kočnice": "brakes",
+};
 
 //LOGIN KORISNIKA 
 app.post('/login', async (req, res) => {
@@ -110,14 +115,37 @@ app.get("/vehicle/:id", async (req, res) => {
 // Dodavanje troška vozilu - VehicleDetails
 app.post("/vehicle/:id/costs", async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ error: "BadId" });
 
-    const { type, description, amount, date, mileage } = req.body;
+    const {
+      type, subcategory, description, notes, location, vendor,
+      amount, date, mileage
+    } = req.body;
+
+    if (!type || amount === undefined || amount === null) {
+      return res.status(400).json({ error: "ValidationError", message: "Type i amount su obavezni." });
+    }
+
     const cost = {
-      type, description, amount: Number(amount),
-      date: date ? new Date(date) : new Date(), mileage: Number(mileage)
+      type,
+      description,
+      notes,
+      location,
+      vendor,
+      amount: Number(amount),
+      date: date ? new Date(date) : new Date(),
     };
+
+    if ((type === "servis" || type === "kvar") && subcategory) {
+      cost.subcategory = subcategory;
+    } else {
+      cost.subcategory = ""; 
+    }
+
+    if (mileage !== undefined && mileage !== "" && mileage !== null) {
+      cost.mileage = Number(mileage);
+    }
 
     const v = await Vehicle.findByIdAndUpdate(
       id,
@@ -125,9 +153,34 @@ app.post("/vehicle/:id/costs", async (req, res) => {
       { new: true }
     );
 
+    if (v && cost.type === "servis" && cost.subcategory && SERVICE_RESET_MAP[cost.subcategory]) {
+      const key = SERVICE_RESET_MAP[cost.subcategory];
+
+      let lastKm = null;
+      if (typeof cost.mileage === "number" && !Number.isNaN(cost.mileage)) {
+        lastKm = cost.mileage;
+      } else if (typeof v.odometer === "number" && v.odometer > 0) {
+        lastKm = v.odometer;
+      }
+
+      if (lastKm === null) {
+        return res.status(201).json({ status: "Added", vehicle: v, cost });
+      }
+      
+      const patch = {};
+      patch[`serviceCounters.${key}.lastKm`] = lastKm;
+      patch[`serviceCounters.${key}.lastDate`] = cost.date || new Date();
+      
+      await Vehicle.updateOne({ _id: v._id }, { $set: patch });      
+      const fresh = await Vehicle.findById(v._id);
+      return res.status(201).json({ status: "Added", vehicle: fresh, cost });
+    }
+
     if (!v) return res.status(404).json({ error: "NotFound" });
+
     res.status(201).json({ status: "Added", vehicle: v, cost });
   } catch (err) {
+    console.error("Add cost error:", err);
     res.status(400).json({ error: "ValidationError", message: err.message });
   }
 });
@@ -188,4 +241,130 @@ app.delete("/vehicle/:id", async (req, res) => {
     console.error("Delete vehicle error:", err);
     res.status(500).json({ error: "ServerError" });
   }
+});
+
+// Ažuriraj trošak
+app.put("/vehicle/:id/costs/:costId", async (req, res) => {
+  try {
+    const { id, costId } = req.params;
+    if (!Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(costId)) {
+      return res.status(400).json({ error: "BadId" });
+    }
+
+    const {
+      type, subcategory, description, notes, location, vendor,
+      amount, date, mileage
+    } = req.body;
+
+    const setOps = {
+      "costs.$[c].type": type,
+      "costs.$[c].description": description,
+      "costs.$[c].notes": notes,
+      "costs.$[c].location": location,
+      "costs.$[c].vendor": vendor,
+      "costs.$[c].amount": Number(amount),
+      "costs.$[c].date": date ? new Date(date) : new Date(),
+    };
+
+    if ((type === "servis" || type === "kvar") && subcategory) {
+      setOps["costs.$[c].subcategory"] = subcategory;
+    } else {
+      setOps["costs.$[c].subcategory"] = ""; 
+    }
+
+    if (mileage !== undefined && mileage !== null && String(mileage) !== "") {
+      setOps["costs.$[c].mileage"] = Number(mileage);
+    } else {
+      setOps["costs.$[c].mileage"] = undefined;
+    }
+
+    const v = await Vehicle.findOneAndUpdate(
+      { _id: id },
+      { $set: setOps },
+      { new: true, arrayFilters: [{ "c._id": costId }] }
+    );
+
+    if (!v) return res.status(404).json({ error: "NotFound" });
+
+    if (type === "servis" && SERVICE_RESET_MAP[subcategory]) {
+      const key = SERVICE_RESET_MAP[subcategory];
+
+      const same = (v.costs || [])
+        .filter((c) => c.type === "servis" && c.subcategory === subcategory)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      if (same.length) {
+        const newest = same[0];
+
+        let lastKm = null;
+        if (typeof newest.mileage === "number" && !Number.isNaN(newest.mileage)) {
+          lastKm = newest.mileage;
+        } else if (typeof v.odometer === "number" && v.odometer > 0) {
+          lastKm = v.odometer;
+        }
+
+        if (lastKm !== null) {
+          const patch = {};
+          patch[`serviceCounters.${key}.lastKm`] = lastKm;
+          patch[`serviceCounters.${key}.lastDate`] = newest.date || new Date();
+          await Vehicle.updateOne({ _id: v._id }, { $set: patch });
+          const fresh = await Vehicle.findById(v._id);
+          return res.json({ status: "Updated", vehicle: fresh });
+        }
+      }
+    }
+
+    res.json({ status: "Updated", vehicle: v });
+  } catch (err) {
+    console.error("Update cost error:", err);
+    res.status(400).json({ error: "ValidationError", message: err.message });
+  }
+});
+
+// Obriši jedan trošak
+app.delete("/vehicle/:id/costs/:costId", async (req, res) => {
+  try {
+    const { id, costId } = req.params;
+    if (!Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(costId)) {
+      return res.status(400).json({ error: "BadId" });
+    }
+
+    const v = await Vehicle.findByIdAndUpdate(
+      id,
+      { $pull: { costs: { _id: costId } } },
+      { new: true }
+    );
+
+    if (!v) return res.status(404).json({ error: "NotFound" });
+    res.json({ status: "Deleted", vehicle: v });
+  } catch (err) {
+    console.error("Delete cost error:", err);
+    res.status(500).json({ error: "ServerError" });
+  }
+});
+
+// Ažuriraj odometar
+app.put("/vehicle/:id/odometer", async (req, res) => {
+  const { id } = req.params;
+  const { odometer } = req.body;
+  const v = await Vehicle.findByIdAndUpdate(id, { $set: { odometer: Number(odometer) } }, { new: true });
+  if (!v) return res.status(404).json({ error: "NotFound" });
+  res.json({ status: "Updated", vehicle: v });
+});
+
+// Ažuriraj intervale (ručna izmjena)
+app.put("/vehicle/:id/service-settings", async (req, res) => {
+  const { id } = req.params;
+  const { smallKm, smallMonths, bigKm, bigMonths, brakesKm, brakesMonths } = req.body;
+  const $set = {};
+  if (smallKm !== undefined)   $set["serviceCounters.small.intervalKm"] = Number(smallKm);
+  if (smallMonths !== undefined)$set["serviceCounters.small.intervalMonths"] = Number(smallMonths);
+  if (bigKm !== undefined)     $set["serviceCounters.big.intervalKm"] = Number(bigKm);
+  if (bigMonths !== undefined) $set["serviceCounters.big.intervalMonths"] = Number(bigMonths);
+  if (brakesKm !== undefined)  $set["serviceCounters.brakes.intervalKm"] = Number(brakesKm);
+  if (brakesMonths !== undefined)$set["serviceCounters.brakes.intervalMonths"] = Number(brakesMonths);
+
+  const v = await Vehicle.findByIdAndUpdate(id, { $set }, { new: true });
+  if (!v) return res.status(404).json({ error: "NotFound" });
+  res.json({ status: "Updated", vehicle: v });
 });
